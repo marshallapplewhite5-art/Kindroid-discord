@@ -77,9 +77,7 @@ function shouldAllowBotMessage(message: Message): boolean {
 }
 
 // Helper function to check if the bot can respond to a channel before responding
-async function canRespondToChannel(
-  channel: Message["channel"]
-): Promise<boolean> {
+function canRespondToChannel(channel: Message["channel"]): boolean {
   try {
     // For DM channels, we only need to check if we can send messages
     if (channel.type === ChannelType.DM) {
@@ -154,7 +152,7 @@ async function createDiscordClientForBot(
       }
     }
 
-    if (!(await canRespondToChannel(message.channel))) return;
+    if (!canRespondToChannel(message.channel)) return;
 
     // Handle DMs differently from server messages
     if (message.channel.type === ChannelType.DM) {
