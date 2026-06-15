@@ -1,4 +1,6 @@
 import axios, { AxiosError } from "axios";
+import { Buffer } from "node:buffer";
+import process from "node:process";
 import {
   ConversationMessage,
   KindroidResponse,
