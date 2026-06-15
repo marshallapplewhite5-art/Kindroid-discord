@@ -131,16 +131,25 @@ async function fetchConversationFromDiscord(
 
     // Now format messages using cached display names or {{ai}} for our bot's messages
     const messages = await Promise.all(
-      sorted.map(
-        async (msg: Message): Promise<ConversationMessage> => ({
+      sorted.map(async (msg: Message): Promise<ConversationMessage> => {
+        let text = msg.content;
+
+        // Handle messages with no text but with attachments
+        if (!text && msg.attachments.size > 0) {
+          text = `(sent ${msg.attachments.size} attachment${
+            msg.attachments.size > 1 ? "s" : ""
+          })`;
+        }
+
+        return {
           username:
             msg.author.id === ourBotId
               ? "{{ai}}"
               : await getUserDisplayName(msg),
-          text: msg.content,
+          text: text || "(empty message)",
           timestamp: msg.createdAt.toISOString(),
-        })
-      )
+        };
+      })
     );
 
     return messages;

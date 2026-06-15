@@ -28,6 +28,40 @@ const activeBots = new Map<string, Client>();
 // Track DM conversation counts with proper typing
 const dmConversationCounts = new Map<string, DMConversationCount>();
 
+/**
+ * Splits a long message into multiple chunks to stay within Discord's character limit
+ * @param text - The text to split
+ * @param limit - Maximum characters per chunk
+ * @returns Array of message chunks
+ */
+function splitMessage(text: string, limit: number = 2000): string[] {
+  if (text.length <= limit) return [text];
+
+  const chunks: string[] = [];
+  let currentText = text;
+
+  while (currentText.length > 0) {
+    if (currentText.length <= limit) {
+      chunks.push(currentText);
+      break;
+    }
+
+    // Find the best place to split
+    let splitIndex = currentText.lastIndexOf("\n", limit);
+    if (splitIndex === -1) {
+      splitIndex = currentText.lastIndexOf(" ", limit);
+    }
+    if (splitIndex === -1 || splitIndex === 0) {
+      splitIndex = limit;
+    }
+
+    chunks.push(currentText.substring(0, splitIndex).trim());
+    currentText = currentText.substring(splitIndex).trim();
+  }
+
+  return chunks;
+}
+
 // Helper function to check if the bot can respond to a channel before responding
 function shouldAllowBotMessage(message: Message): boolean {
   // If in DM, skip chain logic entirely
@@ -171,9 +205,10 @@ async function createDiscordClientForBot(
     // Check if the message mentions or references the bot
     const isMentioned = message.mentions.users.has(botUser.id);
     const containsBotName = message.content.toLowerCase().includes(botUsername);
+    const isReplyToBot = message.mentions.repliedUser?.id === botUser.id;
 
-    // Ignore if the bot is not mentioned or referenced
-    if (!isMentioned && !containsBotName) return;
+    // Ignore if the bot is not mentioned, referenced, or replied to
+    if (!isMentioned && !containsBotName && !isReplyToBot) return;
 
     try {
       // Show typing indicator
@@ -203,20 +238,37 @@ async function createDiscordClientForBot(
         return;
       }
 
-      // If it was a mention, reply to the message. Otherwise, send as normal message
-      if (isMentioned) {
-        await message.reply(aiResult.reply);
+      // Split message if it's too long
+      const chunks = splitMessage(aiResult.reply);
+
+      // If it was a mention or reply, reply to the message with the first chunk
+      // and send subsequent chunks as normal messages
+      if (isMentioned || isReplyToBot) {
+        await message.reply(chunks[0]);
+        if (chunks.length > 1) {
+          const channel = message.channel;
+          if (
+            channel instanceof BaseGuildTextChannel ||
+            channel instanceof DMChannel
+          ) {
+            for (let i = 1; i < chunks.length; i++) {
+              await channel.send(chunks[i]);
+            }
+          }
+        }
       } else if (
         message.channel instanceof BaseGuildTextChannel ||
         message.channel instanceof DMChannel
       ) {
-        await message.channel.send(aiResult.reply);
+        for (const chunk of chunks) {
+          await message.channel.send(chunk);
+        }
       }
     } catch (error) {
       console.error(`[Bot ${botConfig.id}] Error:`, error);
       const errorMessage =
         "Beep boop, something went wrong. Please contact the Kindroid owner if this keeps up!";
-      if (isMentioned) {
+      if (isMentioned || isReplyToBot) {
         await message.reply(errorMessage);
       } else if (
         message.channel instanceof BaseGuildTextChannel ||
@@ -292,8 +344,19 @@ async function handleDirectMessage(
         return;
       }
 
-      // Send the AI's reply
-      await message.reply(aiResult.reply);
+      // Split message if it's too long
+      const chunks = splitMessage(aiResult.reply);
+
+      // Send the AI's reply in chunks
+      await message.reply(chunks[0]);
+      if (chunks.length > 1) {
+        const channel = message.channel;
+        if (channel instanceof DMChannel) {
+          for (let i = 1; i < chunks.length; i++) {
+            await channel.send(chunks[i]);
+          }
+        }
+      }
     }
   } catch (error) {
     console.error(`[Bot ${botConfig.id}] DM Error:`, error);
