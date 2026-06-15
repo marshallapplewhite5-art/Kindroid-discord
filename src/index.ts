@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import process from "node:process";
 import { initializeAllBots, shutdownAllBots } from "./discordManager";
 import { BotConfig } from "./types";
 
